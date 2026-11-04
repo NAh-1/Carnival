@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gaming Stall - Queue Management System</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            neutral: {
+              850: '#121824',
+              900: '#0d1117',
+              950: '#06090e',
+            },
+            accent: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+            }
+          },
+          transitionTimingFunction: {
+            'out-cubic': 'cubic-bezier(0.33, 1, 0.68, 1)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Design Tokens & Refined Interactions */
+    .card-lift {
+      transition: transform 0.2s cubic-bezier(0.33, 1, 0.68, 1), box-shadow 0.2s cubic-bezier(0.33, 1, 0.68, 1);
+    }
+    .card-lift:hover {
+      transform: translateY(-2px);
+    }
+    .btn-active:active {
+      transform: translateY(1px);
+    }
+  </style>
+</head>
+<body class="bg-neutral-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-slate-700 selection:text-white">
+
+
+  <div id="authGate" class="fixed inset-0 z-50 bg-neutral-950 flex items-center justify-center p-6">
+    <form id="loginForm" class="w-full max-w-md bg-neutral-900 border border-slate-800 rounded-2xl p-8 space-y-5">
+      <div>
+        <div class="text-xs uppercase tracking-widest text-emerald-500 font-semibold">Stall Queue</div>
+        <h1 class="text-2xl font-bold mt-2">Admin sign in</h1>
+        <p class="text-sm text-slate-400 mt-2">Enter the approved admin email. We’ll send you a secure sign-in link.</p>
+      </div>
+      <input id="adminEmail" type="email" required autocomplete="email" placeholder="Admin email"
+        class="w-full bg-neutral-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-white">
+      <button id="loginButton" type="submit" class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-3 text-sm font-semibold text-white">Send sign-in link</button>
+      <p id="authMessage" class="text-sm text-slate-400" role="status"></p>
+    </form>
+  </div>
+
+  <!-- View Switcher Tabs -->
+  <header class="border-b border-slate-900 bg-neutral-900/40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
+      <div class="text-sm font-semibold text-slate-300 tracking-wide uppercase">Queue Manager</div>
+      <button id="logoutBtn" onclick="adminSignOut()" class="hidden text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">Sign out</button>
+      <div class="flex space-x-2">
+        <button id="tabAdminBtn" onclick="switchTab('admin')" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 text-slate-100 transition-colors">
+          Admin Dashboard
+        </button>
+        <button id="tabDisplayBtn" onclick="switchTab('display')" class="px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition-colors">
+          TV Display View
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Admin View Tab -->
+  <main id="adminTab" class="hidden flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+
+    <!-- Overview Stats Bar -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 py-4">
+      <div class="space-y-1 border-l-2 border-slate-800 pl-4">
+        <span class="text-xs font-semibold tracking-wider text-slate-500 uppercase">Waiting</span>
+        <div id="statWaiting" class="text-3xl font-bold font-mono text-amber-400">0</div>
+      </div>
+      <div class="space-y-1 border-l-2 border-slate-800 pl-4">
+        <span class="text-xs font-semibold tracking-wider text-slate-500 uppercase">Called</span>
+        <div id="statCalled" class="text-3xl font-bold font-mono text-emerald-400">0</div>
+      </div>
+      <div class="space-y-1 border-l-2 border-slate-800 pl-4">
+        <span class="text-xs font-semibold tracking-wider text-slate-500 uppercase">Completed</span>
+        <div id="statCompleted" class="text-3xl font-bold font-mono text-slate-300">0</div>
+      </div>
+      <div class="space-y-1 border-l-2 border-slate-800 pl-4">
+        <span class="text-xs font-semibold tracking-wider text-slate-500 uppercase">Est. Wait</span>
+        <div id="statWaitTime" class="text-3xl font-bold font-mono text-slate-400">0m</div>
+      </div>
+    </div>
+
+    <!-- Active Call Display Banner -->
+    <div id="nowCallingBanner" class="hidden transition-all duration-300">
+      <div class="p-6 bg-emerald-950/20 border border-emerald-900/40 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center space-x-4">
+          <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+          <div>
+            <div class="text-xs font-semibold text-emerald-500 tracking-wider uppercase">Currently Called</div>
+            <div id="bannerPlayerName" class="text-2xl font-bold text-slate-100">--</div>
+          </div>
+        </div>
+        <div id="bannerTicket" class="text-4xl font-extrabold font-mono text-emerald-400">#--</div>
+        <div class="flex items-center space-x-2">
+          <button onclick="updatePlayerStatusFromBanner('in-progress')" class="px-3 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors">Start Session</button>
+          <button onclick="updatePlayerStatusFromBanner('completed')" class="px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors">Complete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Registration and Active List Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+      
+      <!-- Player Registration -->
+      <div class="space-y-4">
+        <div class="text-xs font-semibold tracking-wider text-slate-500 uppercase">Register Player</div>
+        
+        <form id="registrationForm" onsubmit="handleRegistration(event)" class="space-y-4">
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-slate-400">Player Name</label>
+            <input type="text" id="playerName" required placeholder="e.g. Alex Smith" class="w-full bg-neutral-900 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors">
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-slate-400">Phone Number</label>
+            <input type="tel" id="playerPhone" required placeholder="e.g. 555-0199" class="w-full bg-neutral-900 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors">
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-slate-400">Ticket Number</label>
+              <input type="number" id="ticketNum" required class="w-full bg-neutral-900 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-slate-600 transition-colors">
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-slate-400">Voucher / Discount</label>
+              <select id="voucherStatus" class="w-full bg-neutral-900 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-slate-600 transition-colors">
+                <option value="none">Standard Entry</option>
+                <option value="math_winner">Math Box Winner (20% Off)</option>
+                <option value="custom">Custom Discount</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" id="btnSubmit" class="w-full py-2.5 bg-slate-100 hover:bg-white text-neutral-950 font-semibold text-sm rounded-lg transition-colors flex items-center justify-center space-x-2">
+            <span>Issue Ticket & Add to Queue</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Queue Table -->
+      <div class="lg:col-span-2 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="text-xs font-semibold tracking-wider text-slate-500 uppercase">Current Queue</div>
+          <div class="flex items-center space-x-2">
+            <input type="text" id="searchQueue" oninput="renderQueueTable()" placeholder="Search player or ticket..." class="bg-neutral-900 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors">
+            <button onclick="clearCompleted()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">Clear Finished</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-900 text-xs text-slate-500 uppercase font-semibold">
+                <th class="py-2 px-3">Ticket</th>
+                <th class="py-2 px-3">Player</th>
+                <th class="py-2 px-3">Phone</th>
+                <th class="py-2 px-3">Status</th>
+                <th class="py-2 px-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="queueTableBody" class="divide-y divide-slate-900 text-sm">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Separate TV Display Screen Tab -->
+  <main id="displayTab" class="hidden flex-1 max-w-5xl w-full mx-auto px-4 py-12 flex flex-col justify-center space-y-12">
+    <div class="text-center space-y-2">
+      <span class="text-xs font-semibold uppercase tracking-widest text-slate-500">Live Status Display</span>
+      <h2 class="text-2xl font-bold text-slate-200 tracking-tight">Gaming Stall Queue</h2>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div class="space-y-3">
+        <span class="text-xs font-semibold text-emerald-500 uppercase tracking-wider block text-center">Now Called / Playing</span>
+        <div id="tvCurrentCall" class="p-12 bg-neutral-900/60 rounded-xl border border-slate-850 text-center flex flex-col items-center justify-center min-h-[260px] space-y-3">
+          <span class="text-slate-600 text-sm">No active player called</span>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block text-center">Up Next</span>
+        <div id="tvUpNext" class="p-12 bg-neutral-900/40 rounded-xl border border-slate-850 text-center flex flex-col items-center justify-center min-h-[260px] space-y-3">
+          <span class="text-slate-600 text-sm">Queue is currently empty</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://ssfnesygrowenbtbuvvp.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_hXXphammunfQv_ptO7lU3g_Mb22PYHI";
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  </script>
+  <script>
+    let queue = [];
+    let currentCallingId = null;
+    let queueChannel = null;
+
+    function setAuthMessage(message, isError = false) {
+      const el = document.getElementById('authMessage');
+      el.textContent = message;
+      el.className = isError ? 'text-sm text-rose-400' : 'text-sm text-slate-400';
+    }
+
+    function isAllowedEmail(email) {
+      return email && email.toLowerCase() === 'sinan-12869@sisqatar.info';
+    }
+
+    async function verifyAdmin(user) {
+      if (!user || !isAllowedEmail(user.email)) return false;
+      const { data, error } = await db.from('stall_admins')
+        .select('email').eq('email', user.email.toLowerCase()).maybeSingle();
+      return !error && !!data;
+    }
+
+    async function showAdmin(user) {
+      document.getElementById('authGate').classList.add('hidden');
+      document.getElementById('adminTab').classList.remove('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
+      await loadQueue();
+      if (queueChannel) await db.removeChannel(queueChannel);
+      queueChannel = db.channel('stall-queue-admin')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries' }, loadQueue)
+        .subscribe();
+    }
+
+    async function adminSignOut() {
+      if (queueChannel) await db.removeChannel(queueChannel);
+      queueChannel = null;
+      await db.auth.signOut();
+      queue = [];
+      document.getElementById('adminTab').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+      document.getElementById('authGate').classList.remove('hidden');
+      switchTab('admin');
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const email = document.getElementById('adminEmail').value.trim().toLowerCase();
+      const button = document.getElementById('loginButton');
+      if (!isAllowedEmail(email)) {
+        setAuthMessage('This email is not on the admin allowlist.', true);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Sending…';
+      setAuthMessage('');
+      const { error } = await db.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.href, shouldCreateUser: true }
+      });
+      button.disabled = false;
+      button.textContent = 'Send sign-in link';
+      setAuthMessage(error ? error.message : 'Check your inbox for the secure sign-in link.', !!error);
+    });
+
+    db.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) return;
+      // Defer database work until after the auth callback has completed.
+      setTimeout(async () => {
+        const allowed = await verifyAdmin(session.user);
+        if (allowed) {
+          await showAdmin(session.user);
+        } else {
+          await db.auth.signOut();
+          setAuthMessage('This account is not authorized to manage the queue.', true);
+        }
+      }, 0);
+    });
+
+    async function loadQueue() {
+      const { data: entries, error } = await db.from('queue_entries')
+        .select('id,name,ticket,voucher,status,created_at').order('created_at', { ascending: true });
+      if (error) {
+        console.error(error);
+        setAuthMessage('Could not load the queue: ' + error.message, true);
+        return;
+      }
+      const { data: privateRows, error: privateError } = await db.from('queue_private')
+        .select('entry_id,phone');
+      if (privateError) {
+        console.error(privateError);
+        setAuthMessage('Could not load private player details: ' + privateError.message, true);
+        return;
+      }
+      const phoneById = new Map((privateRows || []).map(row => [row.entry_id, row.phone]));
+      queue = (entries || []).map(row => ({
+        id: row.id, name: row.name, ticket: row.ticket, voucher: row.voucher,
+        status: row.status, phone: phoneById.get(row.id) || '',
+        timestamp: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }));
+      const current = queue.find(p => p.status === 'called');
+      currentCallingId = current ? current.id : null;
+      render();
+      resetTicketInput();
+    }
+
+    function switchTab(tab) {
+      const adminTab = document.getElementById('adminTab');
+      const displayTab = document.getElementById('displayTab');
+      const tabAdminBtn = document.getElementById('tabAdminBtn');
+      const tabDisplayBtn = document.getElementById('tabDisplayBtn');
+      if (tab === 'admin') {
+        if (document.getElementById('authGate').classList.contains('hidden')) {
+          adminTab.classList.remove('hidden');
+        }
+        displayTab.classList.add('hidden');
+        tabAdminBtn.className = 'px-4 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 text-slate-100 transition-colors';
+        tabDisplayBtn.className = 'px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition-colors';
+      } else {
+        adminTab.classList.add('hidden');
+        displayTab.classList.remove('hidden');
+        tabDisplayBtn.className = 'px-4 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 text-slate-100 transition-colors';
+        tabAdminBtn.className = 'px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition-colors';
+      }
+    }
+
+    function getNextTicketNumber() {
+      if (!queue.length) return 1;
+      return Math.max(...queue.map(p => Number(p.ticket) || 0)) + 1;
+    }
+
+    function resetTicketInput() {
+      document.getElementById('ticketNum').value = getNextTicketNumber();
+    }
+
+    async function handleRegistration(e) {
+      e.preventDefault();
+      const name = document.getElementById('playerName').value.trim();
+      const phone = document.getElementById('playerPhone').value.trim();
+      const ticket = parseInt(document.getElementById('ticketNum').value, 10);
+      const voucher = document.getElementById('voucherStatus').value;
+      if (!name || !phone || !Number.isInteger(ticket)) return;
+
+      const { data: entry, error } = await db.from('queue_entries')
+        .insert({ name, ticket, voucher, status: 'waiting' })
+        .select('id').single();
+      if (error) {
+        alert('Could not add player: ' + error.message);
+        return;
+      }
+      const { error: phoneError } = await db.from('queue_private')
+        .insert({ entry_id: entry.id, phone });
+      if (phoneError) {
+        await db.from('queue_entries').delete().eq('id', entry.id);
+        alert('Could not save phone number: ' + phoneError.message);
+        return;
+      }
+      document.getElementById('registrationForm').reset();
+      resetTicketInput();
+      await loadQueue();
+    }
+
+    async function updateStatus(id, newStatus) {
+      const { error } = await db.from('queue_entries').update({ status: newStatus }).eq('id', id);
+      if (error) {
+        alert('Could not update status: ' + error.message);
+        return;
+      }
+      if (newStatus === 'called') {
+        currentCallingId = id;
+        playNotificationSound();
+      } else if (currentCallingId === id && ['completed', 'cancelled'].includes(newStatus)) {
+        currentCallingId = null;
+      }
+      await loadQueue();
+    }
+
+    function updatePlayerStatusFromBanner(status) {
+      if (currentCallingId) updateStatus(currentCallingId, status);
+    }
+
+    async function clearCompleted() {
+      const ids = queue.filter(p => ['completed', 'cancelled'].includes(p.status)).map(p => p.id);
+      if (!ids.length) return;
+      const { error } = await db.from('queue_entries').delete().in('id', ids);
+      if (error) alert('Could not clear finished players: ' + error.message);
+      else await loadQueue();
+    }
+
+    function playNotificationSound() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.3);
+      } catch (e) { console.warn('Audio notification unavailable', e); }
+    }
+
+    function renderStats() {
+      const waiting = queue.filter(p => p.status === 'waiting').length;
+      const called = queue.filter(p => p.status === 'called' || p.status === 'in-progress').length;
+      const completed = queue.filter(p => p.status === 'completed').length;
+      document.getElementById('statWaiting').textContent = waiting;
+      document.getElementById('statCalled').textContent = called;
+      document.getElementById('statCompleted').textContent = completed;
+      document.getElementById('statWaitTime').textContent = `${waiting * 4}m`;
+    }
+
+    function renderQueueTable() {
+      const tbody = document.getElementById('queueTableBody');
+      const search = document.getElementById('searchQueue').value.toLowerCase();
+      const filtered = queue.filter(p => p.name.toLowerCase().includes(search) ||
+        p.ticket.toString().includes(search) || (p.phone || '').toLowerCase().includes(search));
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-600 text-xs">No players matching queue criteria</td></tr>';
+        return;
+      }
+      tbody.innerHTML = filtered.map(player => {
+        let statusBadge = '';
+        if (player.status === 'waiting') statusBadge = '<span class="px-2 py-0.5 text-xs bg-amber-950/40 text-amber-400 border border-amber-900/40 rounded">Waiting</span>';
+        else if (player.status === 'called') statusBadge = '<span class="px-2 py-0.5 text-xs bg-emerald-950/40 text-emerald-400 border border-emerald-900/40 rounded animate-pulse">Called</span>';
+        else if (player.status === 'in-progress') statusBadge = '<span class="px-2 py-0.5 text-xs bg-emerald-900 text-slate-100 rounded">Playing</span>';
+        else if (player.status === 'completed') statusBadge = '<span class="px-2 py-0.5 text-xs bg-slate-900 text-slate-500 rounded">Completed</span>';
+        else statusBadge = '<span class="px-2 py-0.5 text-xs bg-slate-900 text-slate-600 rounded">Cancelled</span>';
+        const voucherBadge = player.voucher === 'math_winner' ? '<span class="text-xs text-emerald-500 ml-1 font-medium">[Math Pass]</span>' : '';
+        return `
+          <tr class="hover:bg-neutral-900/40 transition-colors">
+            <td class="py-3 px-3 font-mono font-semibold text-slate-200">#${player.ticket}</td>
+            <td class="py-3 px-3 text-slate-200 font-medium">${escapeHtml(player.name)}${voucherBadge}</td>
+            <td class="py-3 px-3 font-mono text-xs text-slate-400">${escapeHtml(player.phone || '')}</td>
+            <td class="py-3 px-3">${statusBadge}</td>
+            <td class="py-3 px-3 text-right space-x-1">
+              ${player.status === 'waiting' ? `<button onclick="updateStatus('${player.id}', 'called')" class="px-2 py-1 text-xs bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800/40 text-emerald-400 rounded transition-colors">Call</button>` : ''}
+              ${player.status === 'called' ? `<button onclick="updateStatus('${player.id}', 'in-progress')" class="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors">Start</button>` : ''}
+              ${player.status === 'in-progress' ? `<button onclick="updateStatus('${player.id}', 'completed')" class="px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors">Finish</button>` : ''}
+              ${!['completed', 'cancelled'].includes(player.status) ? `<button onclick="updateStatus('${player.id}', 'cancelled')" class="px-2 py-1 text-xs text-slate-600 hover:text-slate-400 transition-colors">Cancel</button>` : ''}
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    function renderBannerAndDisplay() {
+      const banner = document.getElementById('nowCallingBanner');
+      const activePlayer = queue.find(p => p.status === 'called');
+      if (activePlayer) {
+        currentCallingId = activePlayer.id;
+        banner.classList.remove('hidden');
+        document.getElementById('bannerPlayerName').textContent = activePlayer.name;
+        document.getElementById('bannerTicket').textContent = `#${activePlayer.ticket}`;
+      } else {
+        banner.classList.add('hidden');
+      }
+      const tvCall = document.getElementById('tvCurrentCall');
+      const tvNext = document.getElementById('tvUpNext');
+      const current = queue.find(p => p.status === 'called' || p.status === 'in-progress');
+      const upNextList = queue.filter(p => p.status === 'waiting').slice(0, 4);
+      if (current) {
+        tvCall.innerHTML = `<div class="text-xs text-emerald-500 font-semibold tracking-widest uppercase">TICKET NUMBER</div>
+          <div class="text-6xl font-extrabold font-mono text-emerald-400 tracking-tight">#${current.ticket}</div>
+          <div class="text-xl font-semibold text-slate-100">${escapeHtml(current.name)}</div>`;
+      } else tvCall.innerHTML = '<span class="text-sm text-slate-500">No active player called</span>';
+      if (upNextList.length) {
+        tvNext.innerHTML = `<div class="grid grid-cols-2 gap-4 w-full">${upNextList.map(p => `
+          <div class="p-3 bg-neutral-900 rounded-lg border border-slate-900 text-center">
+            <div class="text-2xl font-bold font-mono text-slate-200">#${p.ticket}</div>
+            <div class="text-xs text-slate-400 truncate">${escapeHtml(p.name)}</div>
+          </div>`).join('')}</div>`;
+      } else tvNext.innerHTML = '<span class="text-sm text-slate-500">Queue is currently empty</span>';
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '').replace(/[&<>"']/g, m =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
+    }
+
+    function render() { renderStats(); renderQueueTable(); renderBannerAndDisplay(); }
+
+    async function initAdmin() {
+      const { data: { session } } = await db.auth.getSession();
+      if (session?.user && await verifyAdmin(session.user)) {
+        await showAdmin(session.user);
+      } else if (session?.user) {
+        await db.auth.signOut();
+      }
+      resetTicketInput();
+      render();
+    }
+
+    initAdmin();
+  </script>
+
+</body>
+</html>
