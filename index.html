@@ -60,11 +60,14 @@
       <div>
         <div class="text-xs uppercase tracking-widest text-emerald-500 font-semibold">Stall Queue</div>
         <h1 class="text-2xl font-bold mt-2">Admin sign in</h1>
-        <p class="text-sm text-slate-400 mt-2">Enter the approved admin email. We’ll send you a secure sign-in link.</p>
+        <p class="text-sm text-slate-400 mt-2">Use your approved admin email and password.</p>
       </div>
-      <input id="adminEmail" type="email" required autocomplete="email" placeholder="Admin email"
+      <input id="adminEmail" type="email" required autocomplete="username" placeholder="Admin email"
         class="w-full bg-neutral-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-white">
-      <button id="loginButton" type="submit" class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-3 text-sm font-semibold text-white">Send sign-in link</button>
+      <input id="adminPassword" type="password" required minlength="8" autocomplete="current-password" placeholder="Password"
+        class="w-full bg-neutral-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-white">
+      <button id="loginButton" type="submit" class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-3 text-sm font-semibold text-white">Sign in</button>
+      <button id="createAccountButton" type="button" class="w-full rounded-lg border border-slate-700 hover:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-200">Create admin password</button>
       <p id="authMessage" class="text-sm text-slate-400" role="status"></p>
     </form>
   </div>
@@ -275,21 +278,45 @@
     document.getElementById('loginForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       const email = document.getElementById('adminEmail').value.trim().toLowerCase();
+      const password = document.getElementById('adminPassword').value;
       const button = document.getElementById('loginButton');
       if (!isAllowedEmail(email)) {
         setAuthMessage('This email is not on the admin allowlist.', true);
         return;
       }
       button.disabled = true;
-      button.textContent = 'Sending…';
+      button.textContent = 'Signing in…';
       setAuthMessage('');
-      const { error } = await db.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: window.location.href, shouldCreateUser: true }
-      });
+      const { error } = await db.auth.signInWithPassword({ email, password });
       button.disabled = false;
-      button.textContent = 'Send sign-in link';
-      setAuthMessage(error ? error.message : 'Check your inbox for the secure sign-in link.', !!error);
+      button.textContent = 'Sign in';
+      if (error) setAuthMessage(error.message, true);
+    });
+
+    document.getElementById('createAccountButton').addEventListener('click', async () => {
+      const email = document.getElementById('adminEmail').value.trim().toLowerCase();
+      const password = document.getElementById('adminPassword').value;
+      const button = document.getElementById('createAccountButton');
+      if (!isAllowedEmail(email)) {
+        setAuthMessage('Only the approved admin email can create an account.', true);
+        return;
+      }
+      if (password.length < 8) {
+        setAuthMessage('Choose a password with at least 8 characters.', true);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Creating…';
+      const { data, error } = await db.auth.signUp({ email, password });
+      button.disabled = false;
+      button.textContent = 'Create admin password';
+      if (error) {
+        setAuthMessage(error.message, true);
+      } else if (data.session) {
+        setAuthMessage('Account created. Signing you in…');
+      } else {
+        setAuthMessage('Account created. Check your email if confirmation is enabled, then sign in with your password.');
+      }
     });
 
     db.auth.onAuthStateChange((_event, session) => {
